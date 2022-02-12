@@ -1,0 +1,71 @@
+---
+title: "Untitled"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r global, include=FALSE}
+library(flexdashboard)
+library(dplyr)
+library(lubridate)
+
+#set path and load all the datasets into R
+setwd("C:\\Users\\eva-m\\Desktop\\Data Science\\London\\_rawdata")
+
+calendar <- read.csv(".\\calendar.csv", stringsAsFactors = FALSE, strip.white = TRUE)
+listings <- read.csv(".\\listings.csv", stringsAsFactors = FALSE)
+
+#taking a look at the data to see what variables we have and if we need to clean the data
+#right off the bat, we're seeing that some of the variables have the wrong data type
+#listing_id should be a string, date a date, available should be boolean, price & adjusted_price numeric,... 
+str(calendar)
+calendar["available"][calendar["available"] == "f"] <- FALSE
+calendar["available"][calendar["available"] == "t"] <- TRUE
+calendar <- calendar %>%
+  mutate(across(contains("price"), ~gsub("\\$", "", .)))
+
+calendar <- calendar %>%
+  mutate(listing_id = as.character(listing_id),
+         date = as.Date(date),
+         available = as.logical(available),
+         price = as.numeric(gsub(",", "", price, fixed=TRUE)),
+         adjusted_price = as.numeric(gsub(",", "",  adjusted_price, fixed=TRUE)))
+
+summary(calendar)
+
+
+str(listings)
+listings <- listings %>%
+  mutate(id = as.character(id),
+         host_id = as.character(host_id)) %>%
+  select(-neighbourhood_group, -license())
+
+summary(listings)
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Chart A
+
+```{r}
+
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+
+```
+
+### Chart C
+
+```{r}
+
+```
+
