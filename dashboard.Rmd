@@ -7,42 +7,126 @@ output:
 ---
 
 ```{r global, include=FALSE}
+# install.packages("rgdal")
+# install.packages("flexdashboard")
+# install.packages("dplyr")
+# install.packages("lubridate")
+# install.packages(plotly)
+# install.packages("ggplot2")
+# install.packages("forcats")
+
 library(flexdashboard)
 library(dplyr)
 library(lubridate)
+library(plotly)
+library(ggplot2)
+library(forcats)
 
 #set path and load all the datasets into R
 setwd("C:\\Users\\eva-m\\Desktop\\Data Science\\London\\_rawdata")
 
-calendar <- read.csv(".\\calendar.csv", stringsAsFactors = FALSE, strip.white = TRUE)
+# calendar <- read.csv(".\\calendar.csv", stringsAsFactors = FALSE, strip.white = TRUE)
 listings <- read.csv(".\\listings.csv", stringsAsFactors = FALSE)
+shapefile_london <- rgdal::readOGR(".\\neighbourhoods.geojson") 
 
 #taking a look at the data to see what variables we have and if we need to clean the data
 #right off the bat, we're seeing that some of the variables have the wrong data type
 #listing_id should be a string, date a date, available should be boolean, price & adjusted_price numeric,... 
-str(calendar)
-calendar["available"][calendar["available"] == "f"] <- FALSE
-calendar["available"][calendar["available"] == "t"] <- TRUE
-calendar <- calendar %>%
-  mutate(across(contains("price"), ~gsub("\\$", "", .)))
+# str(calendar)
+# calendar["available"][calendar["available"] == "f"] <- FALSE
+# calendar["available"][calendar["available"] == "t"] <- TRUE
+# calendar <- calendar %>%
+#   mutate(across(contains("price"), ~gsub("\\$", "", .)))
+# 
+# calendar <- calendar %>%
+#   mutate(listing_id = as.character(listing_id),
+#          date = as.Date(date),
+#          available = as.logical(available),
+#          price = as.numeric(gsub(",", "", price, fixed=TRUE)),
+#          adjusted_price = as.numeric(gsub(",", "",  adjusted_price, fixed=TRUE)))
+# 
+# summary(calendar)
 
-calendar <- calendar %>%
-  mutate(listing_id = as.character(listing_id),
-         date = as.Date(date),
-         available = as.logical(available),
-         price = as.numeric(gsub(",", "", price, fixed=TRUE)),
-         adjusted_price = as.numeric(gsub(",", "",  adjusted_price, fixed=TRUE)))
+# It's interesting to see how different some of the listings are, e.g. that there actually seems to be a listing which can only be booked for a minimum of 1125 nights. Maybe those are apartments of people who are studying abroad for a few semester but don't want to give up their apartments in London or maybe it's just people which bought an apartment to rent out but don't want to commit to permanent renter.
+# Those kind of questions are not interesting for me right now though. As mentioned, I want to visit London this year and we are staying for 4 nights only. We also have a budget we'd love to stick to. So I'll filter for all the listings that apply. 
 
-summary(calendar)
-
-
-str(listings)
+# unique(listings$room_type)
 listings <- listings %>%
   mutate(id = as.character(id),
-         host_id = as.character(host_id)) %>%
-  select(-neighbourhood_group, -license())
+         host_id = as.character(host_id),
+         price_euro = price * 0.88,
+         neighbourhood = as.factor(neighbourhood),
+         room_type = as.factor(room_type)) %>%
+  select(-neighbourhood_group, 
+         -license,
+         -host_name) %>%
+  filter(price_euro <= 100,
+         minimum_nights <= 4,
+         room_type != 'Shared room')
 
-summary(listings)
+str(listings)
+
+# before plotting the listings to a map, I would like to explore the data a little bit further with some other charts
+# e.g. what are the cheaper and the more expensive neighbourhoods? And are apartments more expensive than private rooms? Are there more listings in certain parts of London? Keep in mind that I filtered the really expensive airbnbs out because they aren't in our budget. 
+
+# let's first check that the data is clean enough for our analysis. I don't think we'll find too many mistakes because e.g. the neighbourhoods is probably a dropdown menu in airbnb and gets corrected by them. I don't think we'll find neighbourhoods with spelling mistakes.
+unique_neighbourhoods <- as.data.frame(unique(listings$neighbourhood))
+colnames(unique_neighbourhoods) <- 'neighbourhoods'
+print(unique_neighbourhoods)
+# All the neighbourhood names look very tidy and none of them has a duplicate, so it should be fine! While we're at it, let's quickly check if the names in our shapefile for London have the same names
+sf_unique_neighbourhoods <- as.data.frame(unique(shapefile_london@data$neighbourhood))
+colnames(sf_unique_neighbourhoods) <- 'neighbourhoods'
+
+# the function all_equal from dplyr ignores the row and column order
+all_equal(unique_neighbourhoods, sf_unique_neighbourhoods)
+rm(sf_unique_neighbourhoods, unique_neighbourhoods)
+# this prints TRUE, so that means the neighbourhoods in both, the listings and the shapefile are exactly the same. 
+
+#to do reorder funktioniert nicht
+lollipop <- listings %>%
+  distinct() %>%
+  group_by(neighbourhood) %>%
+  count() %>%
+  ggplot(aes(x = reorder(neighbourhood, -n),
+             y = n)) +
+  geom_segment(aes(x = neighbourhood, 
+                   xend = neighbourhood,
+                   y = 0,
+                   yend = n),
+               size = 1) +
+  geom_point() +
+  theme_light() +
+  coord_flip() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks.x = element_blank()) +
+  xlab('x') +
+  ylab('y')
+lollipop
+
+barchart_type <- listings %>%
+  distinct() %>%
+  group_by(room_type) %>%
+  summarise(avg_price = mean(price_euro)) %>%
+  plot_ly(x = ~room_type,
+          y = ~avg_price,
+          type = 'bar',
+          name = 'Price per airbnb type') %>%
+  layout(yaxis = list(title = 'Type of airbnb'),
+         xaxis = list(title = 'Average cost per night in €'))
+
+barchart_type
+
+reviews_price <- listings %>%
+  plot_ly(x = ~price_euro,
+          y = ~number_of_reviews,
+          color = ~room_type,
+          type = 'scatter') 
+
+reviews_price
+  
+
+
 ```
 
 Column {data-width=650}
